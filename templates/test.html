@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Clusters in NYC Dining</title>
+    <!-- Link to the Leaflet CSS for map styling -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+    <style>
+        /* Make sure the map takes up the full screen */
+        #map {
+            height: 95vh; /* 100% of the viewport height */
+            width: 100%; /* 100% of the viewport width */
+        }
+        /* Styling for the control box */
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px; /* Move the controls to the right side */
+            background: rgba(0, 0, 0, 0.7); /* Dark semi-transparent background */
+            color: white; /* White text for contrast */
+            padding: 15px;
+            z-index: 1000;
+            border-radius: 10px; /* Rounded corners */
+            font-family: Arial, sans-serif; /* Choose a clean font */
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5); /* Shadow to make the controls stand out */
+            width: 200px; /* Set a fixed width for the controls box */
+        }
+
+        /* Adjust label styling for better readability */
+        .controls label {
+            display: block;
+            margin-bottom: 10px; /* Add space between the labels */
+            font-size: 14px; /* Slightly larger text */
+        }
+
+        /* Make checkbox labels visually clear and accessible */
+        .controls input[type="checkbox"] {
+            margin-right: 10px; /* Add space between the checkbox and label text */
+        }
+
+        /* Hover effect for better visibility */
+        .controls label:hover {
+            color: #f0f0f0; /* Slightly lighter text on hover */
+        }
+
+        /* Adjust the text size inside the controls for better readability */
+        .controls input[type="checkbox"] {
+            transform: scale(1.2); /* Slightly increase the checkbox size */
+        }
+
+        /* Optional: Style the checkboxes for better visibility on dark backgrounds */
+        .controls input[type="checkbox"]:checked {
+            background-color: #ffcc00; /* Yellow when checked */
+            border: 2px solid #ffcc00; /* Yellow border for checked */
+        }
+
+        .controls input[type="checkbox"]:not(:checked) {
+            background-color: #444444; /* Dark background when unchecked */
+            border: 2px solid #666666; /* Lighter border when unchecked */
+        }
+
+        #searchContainer {
+            position: absolute;
+            top: 30px;
+            left: 60px;
+            z-index: 1000;
+            width: 300px;
+            font-family: sans-serif;
+          }
+        
+          #dbaSearch {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+          }
+        
+          #suggestions {
+            display: none;
+            background: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            max-height: 200px;
+            overflow-y: auto;
+            border-radius: 0 0 4px 4px;
+          }
+        
+          #suggestions div {
+            padding: 8px;
+            cursor: pointer;
+          }
+        
+          #suggestions div:hover {
+            background-color: #f0f0f0;
+          }
+
+          #loadingOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 2em;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            display: none; /* Hidden by default */
+        }
+        
+    </style>
+</head>
+<body>
+
+    <!-- Create a div to hold the map -->
+    <div id="map"></div>
+
+    <!-- Loading Warning -->
+    <div id="loadingOverlay">Loading...</div>
+
+
+    <!-- Search Box -->
+    <div id="searchContainer">
+        <input type="text" id="dbaSearch" placeholder="Search restaurants..." autocomplete="off" />
+        <div id="suggestions"></div>
+    </div>
+
+    <!-- Controls for toggling layers -->
+    <div class="controls">
+        <label>
+            <input type="checkbox" id="clusterToggle" checked> Show Cluster Layer
+        </label><br>
+        <label>
+            <input type="checkbox" id="heatmapToggle" checked> Show Heatmap Layer
+        </label>
+
+        <!-- Toggle Average Score or Most Recent -->
+        <label><strong>Score Mode:</strong></label>
+        <label>
+            <input type="radio" name="scoreMode" value="average" checked> Average Score
+        </label>
+        <label>
+            <input type="radio" name="scoreMode" value="latest"> Latest Score
+        </label>
+    </div>
+
+    <!-- Link to the Leaflet JavaScript library -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <!-- Link to Fuse.js for Fuzzy Searching Library -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <script>
+        // Handle Loading Warning
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+        
+        // Initialize the map centered on NYC
+        var map = L.map('map').setView([40.7128, -74.0060], 10);
+    
+        // Add a dark basemap tile layer
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+    
+        // This variable will be populated with marker data passed from Streamlit
+        var markers = {{ markers_data|tojson }};
+    
+        // Initialize marker cluster group with custom appearance
+        var markersCluster = L.markerClusterGroup({
+            showCoverageOnHover: false,
+            iconCreateFunction: function(cluster) {
+                var markers = cluster.getAllChildMarkers();
+                var totalScore = 0;
+                var count = markers.length;
+    
+                // Calculate average health score within the cluster
+                markers.forEach(marker => {
+                    totalScore += marker.options.healthScore;
+                });
+    
+                var avgScore = totalScore / count;
+    
+                // Determine cluster size and opacity
+                var size = Math.min(40 + count * 2, 100); // Cluster size scales with count
+                var opacity = Math.max(0.4, 1 - count / 200); // More markers = more transparent
+    
+                // Choose cluster color based on average score
+                var color = avgScore <= 13 ? "rgba(0, 200, 0," :
+                             avgScore <= 27 ? "rgba(255, 200, 0," :
+                                              "rgba(255, 0, 0,";
+    
+                // Return styled HTML circle as cluster icon
+                return L.divIcon({
+                    html: `<div style="width: ${size}px; height: ${size}px; border-radius: 50%; background: ${color}${opacity}); display: flex; align-items: center; justify-content: center;"></div>`,
+                    className: 'custom-cluster',
+                    iconSize: L.point(size, size)
+                });
+            }
+        });
+    
+        // Create array to hold data for the heatmap layer
+        var heatmapData = [];
+        
+
+        // Create array for grouped data
+        var groupedByDBA = {};
+        
+
+        // Loop through each restaurant marker (only one inspection per restaurant now)
+        markers.forEach(markerData => {
+            var lat = markerData[0];
+            var lon = markerData[1];
+            var dba = markerData[2]; // Restaurant name
+            var inspectionDate = markerData[3];
+            var violationDescription = markerData[4];
+            var healthScore = markerData[5];
+
+            if (!groupedByDBA[dba]) {
+                groupedByDBA[dba] = {
+                    lat: lat,
+                    lon: lon,
+                    inspections: []
+                };
+            }
+
+            groupedByDBA[dba].inspections.push({
+                inspectionDate,
+                violationDescription,
+                healthScore
+            });
+        });
+        
+        function buildLayers(scoreMode = 'average') {
+            markersCluster.clearLayers();
+            heatmapData = [];
+        
+            Object.keys(groupedByDBA).forEach(dba => {
+                const data = groupedByDBA[dba];
+                const lat = data.lat;
+                const lon = data.lon;
+        
+                // Skip if there are no inspections
+                if (!data.inspections || data.inspections.length === 0) return;
+        
+                let score;
+        
+                if (scoreMode === 'average') {
+                    score = data.inspections.reduce((sum, i) => sum + i.healthScore, 0) / data.inspections.length;
+                } else {
+                    // Sort by inspection date descending
+                    const sorted = [...data.inspections].sort((a, b) => {
+                        const dateA = new Date(a.inspectionDate);
+                        const dateB = new Date(b.inspectionDate);
+                        return dateB - dateA;
+                    });
+        
+                    score = sorted[0]?.healthScore;
+        
+                    // If score is still invalid, skip
+                    if (typeof score !== 'number' || isNaN(score)) return;
+                }
+                
+                // Get color based on health inspection scores
+                const color = score <= 13 ? "green" :
+                              score <= 27 ? "yellow" : "red";
+                
+                // Populate popup with all historical content
+                let popupContent = `<b>Business Name:</b> ${dba}<br><br>`;
+                // Group violations by inspection date
+                const inspectionsByDate = {};
+                data.inspections.forEach(i => {
+                    const date = i.inspectionDate;
+                    if (!inspectionsByDate[date]) {
+                        inspectionsByDate[date] = {
+                            healthScores: [],
+                            violations: []
+                        };
+                    }
+                    inspectionsByDate[date].healthScores.push(i.healthScore);
+                    inspectionsByDate[date].violations.push(i.violationDescription);
+                });
+                // Build grouped content
+                Object.keys(inspectionsByDate).sort((a, b) => new Date(b) - new Date(a)).forEach((date, index) => {
+                    const group = inspectionsByDate[date];
+                    const avgScore = Math.round(group.healthScores.reduce((a, b) => a + b, 0) / group.healthScores.length);
+
+                    popupContent += `<b>Inspection #${index + 1}</b><br>`;
+                    popupContent += `Date: ${date}<br>`;
+                    popupContent += `Avg. Score: ${avgScore}<br>`;
+                    popupContent += `Violations:<ul>`;
+                    group.violations.forEach(v => {
+                        popupContent += `<li>${v}</li>`;
+                    });
+                    popupContent += `</ul><br>`;
+                });
+
+                
+                // Build markers and add to layer
+                const marker = L.circleMarker([lat, lon], {
+                    radius: 6,
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: 0.8,
+                    healthScore: score,
+                    dbaName: dba
+                });
+        
+                marker.bindPopup(popupContent, {
+                    maxWidth: 300,
+                    maxHeight: 300
+                });
+        
+                markersCluster.addLayer(marker);
+
+                // Calculate intensity for heatmap
+                const intensity = Math.min(Math.max(score / 50, 0), 1);
+                heatmapData.push([lat, lon, intensity]);
+            });
+        
+            heat.setLatLngs(heatmapData);
+        }
+
+        // Initialize heatmap layer
+        var heat = L.heatLayer([], {
+            radius: 10,
+            blur: 5,
+            maxZoom: 17,
+            gradient: {
+                0.0: 'green',
+                0.4: 'lime',
+                0.6: 'yellow',
+                0.8: 'orange',
+                1.0: 'red'
+            }
+        }).addTo(map);
+
+        // Initial Render of layers 
+        buildLayers('average'); 
+    
+
+        // Add clustered markers to map by default
+        map.addLayer(markersCluster);
+    
+        // Toggle functionality for cluster layer
+        document.getElementById('clusterToggle').addEventListener('change', function () {
+            if (this.checked) {
+                map.addLayer(markersCluster);
+            } else {
+                map.removeLayer(markersCluster);
+            }
+        });
+    
+        // Toggle functionality for heatmap layer
+        document.getElementById('heatmapToggle').addEventListener('change', function () {
+            if (this.checked) {
+                map.addLayer(heat);
+            } else {
+                map.removeLayer(heat);
+            }
+        });
+
+        // Toggle average score vs most recent
+        document.querySelectorAll('input[name="scoreMode"]').forEach(radio => {
+            radio.addEventListener('change', function () {
+                const selectedMode = this.value;
+        
+                showLoading();
+        
+                setTimeout(() => {
+                    map.setView([40.7128, -74.0060], 10);
+                    buildLayers(selectedMode);
+                    hideLoading();
+                }, 50); // slight delay to allow browser to show overlay
+            });
+        });        
+
+
+        // Create Fuse instance with list of restaurant DBAs
+        const dbaList = Object.keys(groupedByDBA);
+        const fuse = new Fuse(dbaList, {
+            includeScore: true,
+            threshold: 0.4,
+        });
+
+        const input = document.getElementById('dbaSearch');
+        const suggestionsBox = document.getElementById('suggestions');
+
+        input.addEventListener('input', function () {
+            const query = input.value.trim();
+            suggestionsBox.innerHTML = '';
+
+            if (!query) {
+                suggestionsBox.style.display = 'none';
+                return;
+            }
+
+            const results = fuse.search(query).slice(0, 10); // top 10 matches
+
+            if (results.length) {
+                results.forEach(result => {
+                    const item = document.createElement('div');
+                    item.textContent = result.item;
+                    item.style.padding = '6px';
+                    item.style.cursor = 'pointer';
+                    item.addEventListener('click', function () {
+                        input.value = result.item;
+                        suggestionsBox.innerHTML = '';
+                        suggestionsBox.style.display = 'none';
+                        searchDBA(result.item);
+                    });
+                    suggestionsBox.appendChild(item);
+                });
+                suggestionsBox.style.display = 'block';
+            } else {
+                suggestionsBox.style.display = 'none';
+            }
+        });
+
+        function searchDBA(dbaInput) {
+            const inputVal = dbaInput || document.getElementById('dbaSearch').value.trim();
+            if (!inputVal) return;
+            
+            const matchedDBA = Object.keys(groupedByDBA).find(
+                dba => dba.toLowerCase() === inputVal.toLowerCase()
+            );
+        
+            if (matchedDBA) {
+                const data = groupedByDBA[matchedDBA];
+                const lat = data.lat;
+                const lon = data.lon;
+        
+                const targetLatLng = L.latLng(lat, lon);
+        
+                // Zoom to the marker location
+                map.setView(targetLatLng, 16);
+        
+                // Find the specific marker in the cluster
+                let foundMarker = null;
+                markersCluster.eachLayer(marker => {
+                    if (
+                        marker.getLatLng().lat === lat &&
+                        marker.getLatLng().lng === lon &&
+                        marker.options.dbaName === matchedDBA
+                    ) {
+                        foundMarker = marker;
+                    }
+                });
+        
+                if (foundMarker) {
+                    // Check if it's visible or inside a cluster
+                    if (map.hasLayer(foundMarker)) {
+                        foundMarker.openPopup();
+                    } else {
+                        // Zoom into the cluster until it's expanded
+                        markersCluster.zoomToShowLayer(foundMarker, function () {
+                            foundMarker.openPopup();
+                        });
+                    }
+                } else {
+                    alert("Marker found in data, but not in cluster.");
+                }
+            } else {
+                alert("No matching restaurant found.");
+            }
+        }        
+    </script>
+</body>
+</html>
