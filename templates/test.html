@@ -77,6 +77,8 @@
             border-radius: 4px;
             border: 1px solid #ccc;
             box-sizing: border-box;
+            background: rgba(255, 255, 255, 0.8); 
+            color: #000;
           }
         
           #suggestions {
@@ -258,7 +260,7 @@
                 let score;
         
                 if (scoreMode === 'average') {
-                    score = data.inspections.reduce((sum, i) => sum + i.healthScore, 0) / data.inspections.length;
+                    score = data.inspections.reduce((sum, i) => sum + (i.healthScore || 0), 0) / data.inspections.length;
                 } else {
                     // Sort by inspection date descending
                     const sorted = [...data.inspections].sort((a, b) => {
@@ -278,35 +280,52 @@
                               score <= 27 ? "yellow" : "red";
                 
                 // Populate popup with all historical content
-                let popupContent = `<b>Business Name:</b> ${dba}<br><br>`;
-                // Group violations by inspection date
-                const inspectionsByDate = {};
-                data.inspections.forEach(i => {
-                    const date = i.inspectionDate;
-                    if (!inspectionsByDate[date]) {
-                        inspectionsByDate[date] = {
-                            healthScores: [],
-                            violations: []
-                        };
-                    }
-                    inspectionsByDate[date].healthScores.push(i.healthScore);
-                    inspectionsByDate[date].violations.push(i.violationDescription);
-                });
-                // Build grouped content
-                Object.keys(inspectionsByDate).sort((a, b) => new Date(b) - new Date(a)).forEach((date, index) => {
-                    const group = inspectionsByDate[date];
-                    const avgScore = Math.round(group.healthScores.reduce((a, b) => a + b, 0) / group.healthScores.length);
-
-                    popupContent += `<b>Inspection #${index + 1}</b><br>`;
-                    popupContent += `Date: ${date}<br>`;
-                    popupContent += `Avg. Score: ${avgScore}<br>`;
-                    popupContent += `Violations:<ul>`;
-                    group.violations.forEach(v => {
-                        popupContent += `<li>${v}</li>`;
+                let popupContent = `<b>Business Name:</b> ${dba}<br>`;
+                if (scoreMode === 'average') {
+                    const totalScore = data.inspections.reduce((sum, i) => sum + (i.healthScore || 0), 0);
+                    const averageScore = (totalScore / data.inspections.length).toFixed(2);
+                    popupContent += `<b>Average Score:</b> ${averageScore}<br><br>`;
+                    // Group violations by inspection date
+                    const inspectionsByDate = {};
+                    data.inspections.forEach(i => {
+                        const date = i.inspectionDate;
+                        if (!inspectionsByDate[date]) {
+                            inspectionsByDate[date] = {
+                                healthScores: [],
+                                violations: []
+                            };
+                        }
+                        inspectionsByDate[date].healthScores.push(i.healthScore);
+                        inspectionsByDate[date].violations.push(i.violationDescription);
                     });
-                    popupContent += `</ul><br>`;
-                });
-
+                    // Build grouped content
+                    Object.keys(inspectionsByDate).sort((a, b) => new Date(b) - new Date(a)).forEach((date, index) => {
+                        const group = inspectionsByDate[date];
+                        const score = group.healthScores[0];
+                        popupContent += `<b>Inspection #${index + 1}</b><br>`;
+                        popupContent += `Date: ${date}<br>`;
+                        popupContent += `Score: ${score}<br>`;
+                        popupContent += `Violations:<ul>`;
+                        group.violations.forEach(v => {
+                            popupContent += `<li>${v}</li>`;
+                        });
+                        popupContent += `</ul><br>`;
+                    });
+                } else {
+                    // Only show the most recent inspection information
+                    const latestInspection = data.inspections.sort((a, b) => new Date(b.inspectionDate) - new Date(a.inspectionDate))[0];
+                    if (latestInspection) {
+                        popupContent += `<b>Latest Inspection Date:</b> ${latestInspection.inspectionDate}<br>`;
+                        popupContent += `<b>Latest Score:</b> ${latestInspection.healthScore}<br>`;
+                        popupContent += `<b>Violations:</b><ul>`;
+                        if (latestInspection.violationDescription) {
+                            popupContent += `<li>${latestInspection.violationDescription}</li>`;
+                        }
+                        popupContent += `</ul>`;
+                    } else {
+                        popupContent += `<b>No recent inspection data available.</b>`;
+                    }
+                }
                 
                 // Build markers and add to layer
                 const marker = L.circleMarker([lat, lon], {

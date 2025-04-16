@@ -52,8 +52,7 @@ with st.container():
                 The size of each cluster (large circles) represents the number of restaurants within the cluster, and the color represents the average score of its constituent restaurants. 
                 You can click on each marker to view detailed information about the restaurant, including its name, inspection date, and any recorded violations.""")
     st.markdown("""The heatmap displays areas with higher and lower average health scores, providing a quick visual representation of regions with better or worse overall hygiene. The gradient on this heatmap ranges from green to red, coinciding with health inspection scores. NYC uses golf rules for these inspection scores, so the lower the better! From this we can see hot spots that update and render as increase zoom levels on our map.""")
-    st.markdown("""We've used DBSCAN to provide an extra layer over this and omit noisy points that could otherwise really skew this data.""")
-
+    
     map_data = data[(data['latitude'] != 0) & (data['longitude'] != 0)].dropna(subset=['latitude', 'longitude'])
     # Read html file
     with open("templates/test.html", 'r', encoding='utf-8') as file:

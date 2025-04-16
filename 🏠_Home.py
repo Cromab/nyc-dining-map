@@ -26,9 +26,9 @@ with st.container():
 	st.write("---")
 	st.subheader("Hi, we're Team 120 :wave:")
 	st.write("Team 120 is composed of four group members. Here's a little about them!")
-	st.write("- **Chris**: ")
+	st.write("- **Chris**: ML enthusiast solving the worlds problems one byte at a time.")
 	st.write("- **Romain**: I like creating visualizations and insights (even if I'm an algebraist at heart!) and have technical expertise in finance and the travel industry. ")
-	st.write("- **Suganya**: ")
+	st.write("- **Suganya**: I am a data enthusiast who loves analytics and enjoys uncovering hidden trends and patterns with a background in Banking ")
 	st.write("- **Zo**: I am a data scientist with a background in physics and astronomy. I believe that visualization is the key to helping people explore and understand complex datasets and I hope you enjoy this one!")
     
 # ---- Contact ----#
