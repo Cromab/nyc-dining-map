@@ -58,7 +58,7 @@ with st.container():
 Below is a visualization of the distribution of health scores across all unique restaurants in the dataset. 
 The distribution is shown with a histogram and a kernel density estimate (KDE) curve to visualize the underlying distribution of the data.
 These results reflect only the *most recent* score for a given restaurant, which we think is the most relevant information for you, the user.
-Keep in mind, a **lower** score corresponds to **fewer** health code violiations and an overall **healthier** restaurant.
+Keep in mind, a **lower** score corresponds to **fewer** health code violations and an overall **healthier** restaurant.
         """
     )
 # Plot the distribution of health scores
@@ -165,20 +165,51 @@ grouped_stats = grouped_stats.round(2)
 st.write(grouped_stats)
 
 # Average health score by borough
-avg_score_df = (
+avg_score_boro = (
     most_recent[['boro', 'score']]
     .dropna()
     .groupby('boro', as_index=False)
     .mean(numeric_only=True)
     .rename(columns={'score': 'average_score'})
+    .sort_values(by='average_score', ascending=True)
 )
 # Plot
 fig, ax = plt.subplots(figsize=(8, 4))
-sns.barplot(data=avg_score_df, x='boro', y='average_score', palette='PuBu', ax=ax)
+sns.barplot(data=avg_score_boro, x='boro', y='average_score', palette='PuBu', ax=ax)
 ax.set_xlabel("Borough")
 ax.set_ylabel("Average Health Score")
 ax.set_title("Average Most Recent Health Score by Borough")
 ax.tick_params(axis='x', rotation=45)
+st.pyplot(fig)
+
+
+# Summary statistics for score by cuisine
+st.subheader("Summary Statistics by Cuisine")
+with st.container():
+    st.markdown(
+        """
+We have provided a similar analysis for health inspection scores grouped by cuisine type. 
+We see from these results that the average score for a given cuisine type varies widely, with some cuisines having a much higher average score than others. 
+The lowest average score is for 'Haute Cuisine', which is a type of expsensive French cuisine that involves top chefs, high-quality ingredients, and elaborate presentation.
+"Grab and go" cuisines, like pretzels, hot dogs, and donuts, also seem to have relatively low average scores.
+        """
+    )
+# Average health score by cuisine description
+avg_score_cuisine = (
+    most_recent[['cuisine description', 'score']]
+    .dropna()
+    .groupby('cuisine description', as_index=False)
+    .mean(numeric_only=True)
+    .rename(columns={'score': 'average_score'})
+    .sort_values(by='average_score', ascending=True)
+)
+# Plot
+fig, ax = plt.subplots(figsize=(8, 4))
+sns.barplot(data=avg_score_cuisine, x='cuisine description', y='average_score', palette='PuBu', ax=ax)
+ax.set_xlabel("Cuisine Description")
+ax.set_ylabel("Average Health Score")
+ax.set_title("Average Most Recent Health Score by Cuisine")
+ax.tick_params(axis='x', rotation=90, labelsize=4)
 st.pyplot(fig)
 
 
